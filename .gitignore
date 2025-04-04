@@ -27,14 +27,11 @@ wandb
 output
 examples/*
 
-eagle/eval/table/*.json
-eagle/eval/table/results/*.json
 checkpoints-pretrain/*
 checkpoints-finetune/*
 checkpoints/*
 ckpts*
 slurm_logs/*
-eagle-sft-shihaovideov1.json
 
 datasets/*
 playground/*
