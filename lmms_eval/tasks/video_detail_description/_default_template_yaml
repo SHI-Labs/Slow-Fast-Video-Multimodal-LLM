@@ -1,0 +1,16 @@
+dataset_path: lmms-lab/VideoDetailDescription
+dataset_kwargs:
+  token: True
+  video: True
+  cache_dir: videochatgpt
+  # split: test[:10]
+  # to: 20
+  # unit: "abs "
+lmms_eval_specific_kwargs:
+  default:
+    pre_prompt: ""
+    post_prompt: ""
+metadata:
+  version: 0.0
+  gpt_eval_model_name: gpt-3.5-turbo-1106
+  # gpt_eval_model_name: gpt-4o-mini

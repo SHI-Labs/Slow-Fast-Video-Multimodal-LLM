@@ -1,0 +1,9 @@
+dataset_path: lmms-lab/PerceptionTest_Val
+dataset_kwargs:
+  token: True
+  video: True
+  cache_dir: perceptiontest_val
+lmms_eval_specific_kwargs:
+  default:
+    pre_prompt: "Select the best answer to the following multiple-choice question based on the video.\n"
+    post_prompt: ""
