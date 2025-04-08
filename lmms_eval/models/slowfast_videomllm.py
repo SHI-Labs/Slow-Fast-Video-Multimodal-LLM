@@ -34,7 +34,7 @@ from PIL import Image
 class SlowFastVideoMLLM(lmms):
     def __init__(
         self,
-        pretrained: str = "IVGSZ/Flash-VStream-7b",
+        pretrained: str = "shi-labs/slowfast-video-mllm-qwen2-7b-convnext-576-frame64-s1t4",
         truncation: Optional[bool] = True,
         device: Optional[str] = "cuda",
         dtype: Optional[Union[str, torch.dtype]] = "auto",
@@ -268,35 +268,8 @@ class SlowFastVideoMLLM(lmms):
                 outputs = ""
 
             return outputs
-        
-        task = requests[0].args[4]
-        if "perceptiontest" in task.lower() and self.num_frames > 64:
-            if os.path.exists("perception_test_temp_cache.jsonl"):
-                data = []
-                with open('perception_test_temp_cache.jsonl', "r") as file:
-                    for line in file:
-                        record = json.loads(line)  # Parse each line as a JSON object
-                        data.append(record)        # Add the dictionary to the list
-                existing_ids = [list(_.keys())[0] for _ in data]
-                existing_outputs = {}
-                for data_ in data:
-                    existing_outputs[list(data_.keys())[0]] = list(data_.values())[0] 
-            else:
-                existing_ids = []
-                with open('perception_test_temp_cache.jsonl', "w") as file:
-                    pass # just create one
                 
-        for contexts, gen_kwargs, doc_to_visual, doc_id, task, split in [reg.args for reg in requests]:
-            if "perceptiontest" in task.lower() and self.num_frames > 64:
-                if str(doc_id) in existing_ids:
-                    res.append(existing_outputs[str(doc_id)])
-                    pbar.update(1)
-                    continue
-                if doc_id in existing_ids:
-                    res.append(existing_outputs[doc_id])
-                    pbar.update(1)
-                    continue
-                
+        for contexts, gen_kwargs, doc_to_visual, doc_id, task, split in [reg.args for reg in requests]:        
             outputs = process_request(contexts, gen_kwargs, doc_to_visual, doc_id, task, split)
             pbar.update(1)
             res.append(outputs)
