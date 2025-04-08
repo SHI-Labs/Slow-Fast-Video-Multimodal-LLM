@@ -48,3 +48,10 @@ torchaudio==2.1.2 --index-url https://download.pytorch.org/whl/cu121
 timm==0.9.11
 toml==0.10.2
 tqdm==4.66.1
+loguru==0.7.3
+tenacity
+sqlitedict
+evaluate==0.4.3
+sacrebleu==2.5.1
+pytablewriter==1.2.1
+pytest==8.3.5
