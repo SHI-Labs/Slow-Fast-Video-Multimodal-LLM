@@ -28,9 +28,9 @@
 Balancing temporal resolution and spatial detail under limited compute budget remains a key challenge for video-based multi-modal large language models (MLLMs). Existing methods typically compress video representations using predefined rules before feeding them into the LLM, resulting in irreversible information loss and often ignoring input instructions. To address this, we propose a novel slow-fast architecture that naturally circumvents this trade-off, enabling the use of more input frames while preserving spatial details. Inspired by how humans first skim a video before focusing on relevant parts, our slow-fast design employs a dual-token strategy: 1) "fast" visual tokens — a compact set of compressed video features — are fed into the LLM alongside text embeddings to provide a quick overview; 2) "slow" visual tokens — uncompressed video features — are cross-attended by text embeddings through specially designed hybrid decoder layers, enabling instruction-aware extraction of relevant visual details with linear complexity. We conduct systematic exploration to optimize both the overall architecture and key components. Experiments show that our model significantly outperforms self-attention-only baselines, extending the input capacity from 16 to 128 frames with just a 3% increase in LLM's prefilling computation, and achieving a 16% average performance improvement across five video understanding benchmarks.
 
 ## Updates
-- [TODO] Evaluation code for different benchmarks.
-- [TODO] Model checkpoints and online demo.
-- [TODO] Training and Inference Code.
+- [04/08/2025] Evaluation code for different benchmarks.
+- [04/08/2025] Online demo.
+- [04/08/2025] Model checkpoints and inference code.
 
 ## Contents
 - [Install](#install)
@@ -124,6 +124,115 @@ We are currently preparing the dataset in the following format. But you can prep
 }
 ```
 
+## Inference
+We provide a simple inference script in `simple_inference_demo.py`, which generates a single-round response based on the input video and question. To use this demo:
+```bash
+python simple_inference_demo.py \
+    --model-path shi-labs/slowfast-video-mllm-qwen2-7b-convnext-576-frame64-s1t4 \
+    --conv-mode qwen_1_5 \
+    --video-path "assets/catinterrupt.mp4" \
+    --question "Please describe this video in detail." \
+    --max_frames 64 
+```
+You need to set `max_frames` according to the training configuration of the corresponding model.
+
+You can also use the following code snippet directly.
+```Python
+import torch
+import os
+import numpy as np
+from decord import VideoReader, cpu
+
+from llava.constants import IMAGE_TOKEN_INDEX, DEFAULT_IMAGE_TOKEN, DEFAULT_IM_START_TOKEN, DEFAULT_IM_END_TOKEN
+from llava.conversation import conv_templates, SeparatorStyle
+from llava.model.builder import load_pretrained_model
+from llava.mm_utils import tokenizer_image_token, get_model_name_from_path
+from llava.utils import disable_torch_init
+
+
+def load_video(video_path, max_frames_num):
+        vr = VideoReader(video_path, num_threads=4)
+        fps = round(vr.get_avg_fps())
+        frame_idx = [i for i in range(0, len(vr), fps)]
+
+        uniform_sampled_frames = np.linspace(0, len(vr) - 1, max_frames_num, dtype=int)
+        frame_idx = uniform_sampled_frames.tolist()
+        spare_frames = vr.get_batch(frame_idx).asnumpy()
+
+        return spare_frames
+    
+# Model
+model_path = "shi-labs/slowfast-video-mllm-qwen2-7b-convnext-576-frame64-s1t4"
+video_path = "assets/catinterrupt.mp4"
+question = "Please describe this video in detail."
+max_frames=64
+
+disable_torch_init()
+model_path = os.path.expanduser(model_path)
+model_name = get_model_name_from_path(model_path)
+tokenizer, model, image_processor, context_len = load_pretrained_model(model_path, None, model_name, use_flash_attn=True)    
+
+if model.config.mm_use_im_start_end:
+    prompt = DEFAULT_IM_START_TOKEN + DEFAULT_IMAGE_TOKEN + DEFAULT_IM_END_TOKEN + "\n" + question
+else:
+    prompt = DEFAULT_IMAGE_TOKEN + "\n" + question
+
+conv = conv_templates["qwen_1_5"].copy()
+conv.append_message(conv.roles[0], prompt)
+conv.append_message(conv.roles[1], None)
+prompt = conv.get_prompt()
+
+# read and process video
+video = load_video(video_path, max_frames_num=max_frames)
+video_tensor = image_processor.preprocess(video, return_tensors="pt")["pixel_values"].half().cuda()
+videos = [video_tensor]
+                    
+input_ids = tokenizer_image_token(prompt, tokenizer, IMAGE_TOKEN_INDEX, return_tensors='pt')
+input_ids = input_ids.to(device='cuda', non_blocking=True).unsqueeze(dim=0)
+
+with torch.inference_mode():
+    output_ids = model.generate(
+        input_ids,
+        images=videos,
+        do_sample=True,
+        max_new_tokens=1024,
+        num_beams=1,
+        temperature=0.2,
+        top_p=1.0,
+        use_cache=True)
+
+outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)[0].strip()
+print(f"User input: {question}\n")
+print(outputs)
+```
+
+### Gradio Demo
+We have an online demo available [here](https://huggingface.co/spaces/shi-labs/slow-fast-video-mllm). You can also run it locally by executing:
+```
+python gradio_demo.py \
+    --model-path ${MODEL_CKPT}
+```
+
+## Evaluation
+We evaluate model performance using [lmms-eval](https://github.com/EvolvingLMMs-Lab/lmms-eval). To ensure consistency, we pin the version and align the system prompt across different benchmarks.
+
+Use the following scripts to run the evaluation:
+```bash
+export HF_HOME=$(realpath ~/.cache/huggingface)
+python -m accelerate.commands.launch \
+        --num_processes=8 \
+        lmms_eval_evaluate.py \
+        --model slowfast_videomllm \
+        --model_args pretrained=${MODEL_PATH},video_decode_backend=pyav,conv_template=qwen_1_5,num_frames=${TEST_FRAMES},device_map='' \
+        --tasks ${TASK_NAME} \
+        --batch_size 1 \
+        --log_samples \
+        --log_samples_suffix ${TASK_NAME}_slowfastvideomllm_ \
+        --output_path ./logs/  
+```
+You can modify `${MODEL_PATH}`, `${TEST_FRAMES}` and `${TASK_NAME}` to evaluate different models and tasks. All evaluation scripts are organized under `scripts/lmms_eval_evaluate` for reference.
+
+
 ## Training
 
 We are currently organizing the code and will release the code soon!
@@ -135,7 +244,7 @@ We are currently organizing the code and will release the code soon!
 
 
 ## Acknowledgement
-
+- We would like to thank the Hugging Face team for their Zero GPU support for our demo.
 - [LLaVA](https://github.com/haotian-liu/LLaVA): the codebase we built upon.
 - [Eagle](https://github.com/NVlabs/EAGLE): the codebase we built upon.
 - [OpenFlamingo](https://github.com/mlfoundations/open_flamingo): the hybrid layer implementation borrow some code from open flamingo.
